@@ -5,6 +5,7 @@
 #include "lua.hpp"
 
 #include <winProcHandler.h>
+#include "inputHandlerInternal.h"
 
 
 // lua module load
@@ -14,6 +15,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   {
     luaL_error(L, "Input handler failed to receive WinProcHandler functions.");
   }
+  WinProcHeader::RegisterProc(ProcessInput, -50000);
 
   lua_newtable(L); // push a new table on the stack
 
