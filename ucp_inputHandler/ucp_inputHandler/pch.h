@@ -6,5 +6,7 @@
 // Fügen Sie hier Header hinzu, die vorkompiliert werden sollen.
 #include "framework.h"
 
+// logging can be used everywhere
+#include <luaLog.h>
 
 #endif //PCH_H

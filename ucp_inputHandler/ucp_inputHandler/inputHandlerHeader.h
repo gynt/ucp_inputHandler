@@ -8,6 +8,7 @@ namespace InputHandlerHeader
 {
   enum class KeyStatus
   {
+    NONE = -1, // unused for events, only used in managing
     RESET = 0,
     KEY_DOWN = 1,
     KEY_HOLD = 2,
