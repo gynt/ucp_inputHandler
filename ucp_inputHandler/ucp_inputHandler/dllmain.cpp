@@ -50,6 +50,20 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   // add table
   lua_setfield(L, -2, "funcPtr");
 
+  // return lua funcs
+
+  lua_pushcfunction(L, lua_RegisterControlFunc);
+  lua_setfield(L, -2, "lua_RegisterControlFunc");
+
+  lua_pushcfunction(L, lua_LockKeyMap);
+  lua_setfield(L, -2, "lua_LockKeyMap");
+
+  lua_pushcfunction(L, lua_ReleaseKeyMap);
+  lua_setfield(L, -2, "lua_ReleaseKeyMap");
+
+  lua_pushcfunction(L, lua_RegisterEvent);
+  lua_setfield(L, -2, "lua_RegisterEvent");
+
   return 1;
 }
 

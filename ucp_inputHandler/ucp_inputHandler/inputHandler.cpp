@@ -418,7 +418,7 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 
 	// ctrl << 24 | shift << 16 | alt << 8 | virtualKey
 	const char* mapName{ lua_tostring(L, 1) };
-	unsigned int regInt{ static_cast<unsigned int>(lua_tointeger(L, 1)) };
+	unsigned int regInt{ static_cast<unsigned int>(lua_tointeger(L, 2)) };
 	bool res{ RegisterEvent(mapName, regInt & 0x01000000, regInt & 0x00010000, regInt & 0x00000100, regInt & 0x000000FF,
 		[mapName, regInt](IHH::KeyEvent ev, int, HWND) {	// stores string copy -> could get a bit heavy, but for now ok
 			return handleLuaEvents(mapName, regInt, ev);

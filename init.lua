@@ -1,5 +1,76 @@
 local exports = {}
 
+--[[ LookUpTables ]]--
+
+local status = {
+  RESET     = 0,  -- reset is not consumed by this module and does not receive valid key states
+  KEY_DOWN  = 1,
+  KEY_HOLD  = 2,
+  KEY_UP    = 3,
+}
+
+--[[ Event Object ]]--
+
+local Event = {}
+
+function Event:ctrlActive()
+  return (self.eventInt & 0x01000000) ~= 0
+end
+
+function Event:shiftActive()
+  return (self.eventInt & 0x00010000) ~= 0
+end
+
+function Event:altActive()
+  return (self.eventInt & 0x00000100) ~= 0
+end
+
+function Event:virtualKeyNum()
+  return (self.eventInt & 0xFF)
+end
+
+function Event:statusNum()
+  return (self.eventInt & 0xFF00000000) >> 32
+end
+
+function Event:new(eventInt)
+  local obj = {}
+  setmetatable(obj, self)
+  self.__index = self
+  obj.eventInt = eventInt
+  return obj
+end
+
+--[[ Event Handling Func ]]--
+
+local funcTable = {}
+
+local function controlFunc(keyMapName, refNum, state)
+  local mapTable = funcTable[keyMapName]
+  if mapTable == nil then
+    log(WARNING, "[inputHandler]: Unable to react to key event. Requested key table not found.")
+    return false
+  end
+  
+  local func = mapTable[refNum]
+  if func == nil then
+    log(WARNING, "[inputHandler]: Unable to react to key event. Requested event function not found.")
+    return false
+  end
+
+  return func(Event:new(state)) -- call with new event object
+end
+
+--[[ Helper Func ]]--
+
+local function toIntBoolean(value)
+  if value == true then
+    return 1
+  else
+    return 0
+  end
+end
+
 exports.enable = function(self, moduleConfig, globalConfig)
 
   --[[ get addresses ]]--
@@ -31,6 +102,34 @@ exports.enable = function(self, moduleConfig, globalConfig)
     self[name] = addr
   end
   
+  requireTable.lua_RegisterControlFunc(controlFunc) -- register lua event handler
+  
+  -- these do not need to be wrapped
+  self.LockKeyMap = requireTable.lua_LockKeyMap
+  self.ReleaseKeyMap = requireTable.lua_ReleaseKeyMap
+  
+  -- TODO: there should be a table with keys, maybe
+  self.status = status -- status enums, basically
+
+  self.RegisterEvent = function(keyMapName, ctrlActive, shiftActive, altActive, virtualKey, funcToCall)
+    local regInt = toIntBoolean(ctrlActive) << 24 | toIntBoolean(shiftActive) << 16 | toIntBoolean(altActive) << 8 | (virtualKey & 0xFF)
+
+    if requireTable.lua_RegisterEvent(keyMapName, regInt) then -- register handle before function
+      local mapTable = funcTable[keyMapName]
+      if mapTable == nil then
+        funcTable[keyMapName] = {}
+        mapTable = funcTable[keyMapName]
+      end
+        
+      mapTable[regInt] = funcToCall -- funcs are stored in lua, since I do not want to generate a ton of never lifted references
+      return true
+    else
+      return false
+    end
+  end
+  
+  self.DEFAULT_KEY_MAP = ""
+  
   --[[ modify code ]]--
   
   -- get main state set function to return, the handler takes care of key ups and resets
@@ -50,7 +149,18 @@ exports.enable = function(self, moduleConfig, globalConfig)
     requireTable.address_FillWithKeyStateStructAddr,
     {keyStateStructAddr}
   )
+  
+  --[[ test code ]]--
 
+  self.RegisterEvent(self.DEFAULT_KEY_MAP, true, true, false, 0x20,
+    function(event)
+      if event:statusNum() == self.status.KEY_DOWN then
+        log(INFO, "I am a secret LUA message.")
+      end
+      
+      return false
+    end
+  )
 end
 
 exports.disable = function(self, moduleConfig, globalConfig) error("not implemented") end
