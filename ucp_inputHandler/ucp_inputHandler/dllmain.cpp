@@ -12,16 +12,29 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
 {
   if (!LuaLog::initLog(L))
   {
-    luaL_error(L, "Input handler failed to receive Log functions.");
+    luaL_error(L, "[InputHandler]: Failed to receive Log functions.");
   }
 
   if (!WinProcHeader::initModuleFunctions(L))
   {
-    luaL_error(L, "Input handler failed to receive WinProcHandler functions.");
+    luaL_error(L, "[InputHandler]: Failed to receive WinProcHandler functions.");
   }
   WinProcHeader::RegisterProc(ProcessInput, -50000);
 
+  if (!InitStructures())
+  {
+    LuaLog::Log(LuaLog::LOG_FATAL, "[InputHandler]: Failed to initialize the handler.");
+  }
+
   lua_newtable(L); // push a new table on the stack
+
+  // simple replace
+  lua_pushinteger(L, (DWORD)GetAsyncKeyFake);
+  lua_setfield(L, -2, "funcAddress_GetAsyncKeyState");
+
+  // address
+  lua_pushinteger(L, (DWORD)&crusaderKeyState);
+  lua_setfield(L, -2, "address_FillWithKeyStateStructAddr");
 
   return 1;
 }
