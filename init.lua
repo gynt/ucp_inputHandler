@@ -27,6 +27,10 @@ exports.enable = function(self, moduleConfig, globalConfig)
   
   local requireTable = require("inputHandler.dll") -- loads the dll in memory and runs luaopen_winProcHandler
   
+  for name, addr in pairs(requireTable.funcPtr) do
+    self[name] = addr
+  end
+  
   --[[ modify code ]]--
   
   -- get main state set function to return, the handler takes care of key ups and resets

@@ -8,8 +8,6 @@
 #include "keyEnum.h"
 #include <unordered_map>
 
-namespace IHH = InputHandlerHeader; // easier to use
-
 static std::unordered_map<std::string, KeyMap> keyMapMap{};
 static KeyMap* currentKeyMap{ nullptr };
 static KeyMap* defaultKeyMap{ nullptr };
@@ -22,13 +20,13 @@ static IHH::KeyEventFunc defaultFunc{ RetranslateToWindowProc };	// to be part o
 
 bool InitStructures()
 {
-	auto iter{ keyMapMap.try_emplace("").first };	// no test, but it is first and must work
+	auto iter{ keyMapMap.try_emplace(IHH::DEFAULT_KEY_MAP).first };	// no test, but it is first and must work
 	currentKeyMap = &iter->second;
 	defaultKeyMap = currentKeyMap;
 
 	// test
 	IHH::KeyEvent ev{ VK::SPACE, IHH::KeyStatus::RESET, 1, 1, 1};
-	defaultKeyMap->registerKeyEvent(ev, [](IHH::KeyEvent ev, int windowProcPrio, HWND winHandle) {
+	defaultKeyMap->registerKeyEvent(ev, [](IHH::KeyEvent, int, HWND) {
 		LuaLog::Log(LuaLog::LOG_INFO, "I am a secret message.");
 		return false;
 	});
@@ -123,21 +121,17 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 		return 0; // consumed key
 	}
 
-	// create KeyEvent
-	IHH::KeyEvent currentEvent{ static_cast<unsigned char>(wParam), action, static_cast<unsigned int>(nativeState.ctrl),
-		static_cast<unsigned int>(nativeState.shift), static_cast<unsigned int>(nativeState.alt) };
-
 	// reset here
 
 	if (action == IHH::KeyStatus::RESET)	// dummy at the moment
 	{
-		auto iter{ currentEvents.begin() };
-		while(iter != currentEvents.end()) {
-			(*iter->second)(currentEvent, reservedCurrentPrio, hwnd);	// ignore output, we are resetting
-			iter = currentEvents.erase(iter);	// delete, since we are done
-		}
+		ResetEventsAndKeyState();
 		return WinProcHeader::CallNextProc(reservedCurrentPrio, hwnd, uMsg, wParam, lParam); // send further
 	}
+
+	// create KeyEvent
+	IHH::KeyEvent currentEvent{ static_cast<unsigned char>(wParam), action, static_cast<unsigned int>(nativeState.ctrl),
+		static_cast<unsigned int>(nativeState.shift), static_cast<unsigned int>(nativeState.alt) };
 
 	// handling existing actions here
 
@@ -183,22 +177,23 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 }
 
 
+void ResetEventsAndKeyState()
+{
+	IHH::KeyEvent resetEvent{ 0, IHH::KeyStatus::RESET, 0, 0, 0 };	// reset does not receive status
+	auto iter{ currentEvents.begin() };
+	while (iter != currentEvents.end())
+	{
+		(*iter->second)(resetEvent, 0, 0);	// ignore output, we are resetting
+		iter = currentEvents.erase(iter);	// delete, since we are done
+	}
+	ZeroMemory(crusaderKeyState, sizeof(CrusaderKeyState));	// zero key state object of stronghold should be enough
+}
+
+
 bool RetranslateToWindowProc(IHH::KeyEvent status, int windowProcPrio, HWND winHandle)
 {
 	if (status.status == IHH::KeyStatus::RESET)
 	{
-		switch (status.virtualKey)	// reset could also happen in real reset function? (keep it here for now)
-		{
-			case VK::DOWN:
-				crusaderKeyState->downArrow = 0;
-				break;
-			case VK::V:
-				crusaderKeyState->v = 0;
-				break;
-			default:
-				break;
-		}
-
 		return false; // there is no other handling of resets in the default key handler
 	}
 
@@ -247,33 +242,188 @@ bool RetranslateToWindowProc(IHH::KeyEvent status, int windowProcPrio, HWND winH
 
 IHH::KeyEventFunc* KeyMap::getHandlerFunc(IHH::KeyEvent ev)
 {
-	//unsigned int mapKey{ctrl << 24 | shift << 16 | alt << 8 | key};	// duplicate? would try to evade another func call, or not
 	unsigned int mapKey{ev.ctrlActive << 24 | ev.shiftActive << 16 | ev.altActive << 8 | ev.virtualKey };	// duplicate? would try to evade another func call, or not
 	auto res{ funcMap.find(mapKey) };
 	return res != funcMap.end() ? &res->second : nullptr;
 }
 
-void KeyMap::registerKeyEvent(IHH::KeyEvent ev, IHH::KeyEventFunc&& func)
+bool KeyMap::registerKeyEvent(IHH::KeyEvent ev, IHH::KeyEventFunc&& func)
 {
-	//unsigned int mapKey{ ctrl << 24 | shift << 16 | alt << 8 | key }; // duplicate? would try to evade another func call, or not
 	unsigned int mapKey{ ev.ctrlActive << 24 | ev.shiftActive << 16 | ev.altActive << 8 | ev.virtualKey };	// duplicate? would try to evade another func call, or not
 	funcMap.insert_or_assign(mapKey, std::forward<IHH::KeyEventFunc>(func)); // should i trust the move stuff?
+	return true;	// could later return reject
 }
 
 
-// example
-//if (wParam == VK::BACKSPACE)
-//{
-//	keyMapMap.try_emplace("");
-//	KeyMap* keyMap{ &keyMapMap.find("")->second };
-//	keyMap->registerKeyEvent(true, true, true, VK::A,
-//		[](IHH::KeyEvent) -> bool
-//		{
-//			return true;
-//		});
-//	IHH::KeyEventFunc* shouldBeNull{ keyMap->getHandlerFunc(true, true, true, VK::B) };
-//	IHH::KeyEventFunc* shouldBeFunc{ keyMap->getHandlerFunc(true, true, true, VK::A) };
-//	IHH::KeyEvent test{ IHH::KeyStatus::KEY_HOLD };
-//	bool res{ (*shouldBeFunc)(test) };
-//	int a{ 1 };
-//}
+/* exports */
+
+extern "C" __declspec(dllexport) bool __stdcall LockKeyMap(const char* name)
+{
+	if (currentKeyMap != defaultKeyMap || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0)	// only if currently default and not default name
+	{
+		return false;
+	}
+
+	auto iter{ keyMapMap.try_emplace(name).first };
+	ResetEventsAndKeyState();
+	currentKeyMap = &(iter->second);
+	return true;
+}
+
+extern "C" __declspec(dllexport) bool __stdcall ReleaseKeyMap(const char* name)
+{
+	if (currentKeyMap == defaultKeyMap || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0 )	// only if not default and not default name
+	{
+		return false;
+	}
+
+	auto iter{ keyMapMap.find(name) };
+	if (iter == keyMapMap.end() || &(iter->second) != currentKeyMap)	// if this is not the current map, do not release
+	{
+		return false;
+	}
+
+	ResetEventsAndKeyState();
+	currentKeyMap = defaultKeyMap;
+	return true;
+}
+
+extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char * keyMapName, bool ctrl, bool shift,
+	bool alt, unsigned char virtualKey, IHH::KeyEventFunc&& func)
+{
+	if (keyMapName == nullptr || func == nullptr)	// nullptr not allowed (hopefully it does not create move problems)
+	{
+		return false;
+	}
+
+	auto iter{ keyMapMap.try_emplace(keyMapName).first };
+
+	// since the action is overwriting, there is no "false" return at the moment
+	// later, this might reject invalid keys
+	IHH::KeyEvent createEvent{ virtualKey, IHH::KeyStatus::RESET, ctrl, shift, alt };	// reset is just dummy
+	return (iter->second).registerKeyEvent(createEvent, std::forward<IHH::KeyEventFunc>(func));
+}
+
+/* LUA */
+
+
+bool handleLuaEvents(const char* mapRef, unsigned int mapInt, IHH::KeyEvent ev)
+{
+	if (luaState == nullptr || luaControlFuncIndex == 0)
+	{
+		LuaLog::Log(LuaLog::LOG_ERROR, "[inputHandler]: Missing lua state or handling func. Can not handle lua key event.");
+		return false;
+	}
+
+	lua_rawgeti(luaState, LUA_REGISTRYINDEX, luaControlFuncIndex);
+	lua_pushstring(luaState, mapRef);
+	lua_pushinteger(luaState, mapInt);
+
+	// basically like internal, but uses long long integer by givving the status at another position
+	lua_pushinteger(luaState,
+		static_cast<long long>(ev.status) << 32 |
+		static_cast<long long>(ev.ctrlActive) << 24 |
+		static_cast<long long>(ev.shiftActive) << 16 |
+		static_cast<long long>(ev.altActive) << 8 |
+		static_cast<long long>(ev.virtualKey));
+
+	if (lua_pcall(luaState, 3, 1, 0) != 0)	// call and log potential error (hopefully this does not break anything)
+	{
+		std::string err{ "[inputHandler]: Lua key event caused error: " };
+		err.append(lua_tostring(luaState, -1));
+		LuaLog::Log(LuaLog::LOG_ERROR, err.c_str());
+		return false;
+	}
+
+	if (!lua_isboolean(luaState, -1))
+	{
+		LuaLog::Log(LuaLog::LOG_ERROR, "[inputHandler]: Lua key event did not return a boolean.");
+	}
+	bool res{ static_cast<bool>(lua_toboolean(luaState, -1)) };
+	lua_pop(luaState, 1);  // pop returned value
+	return res;
+}
+
+// need to be called with func ptr, will receive the events
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterControlFunc(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 1)
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Invalid number of args.");
+	}
+
+	if (!lua_isfunction(L, 1))	// only one thing left
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Received no function.");
+	}
+	// stores index to function, also pops value, currently not removed for lifetime of program
+
+	luaControlFuncIndex = luaL_ref(L, LUA_REGISTRYINDEX);
+	return 0;
+}
+
+extern "C" __declspec(dllexport) int __cdecl lua_LockKeyMap(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 1)
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Invalid number of args.");
+	}
+
+	if (!lua_isstring(L, 1))
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Wrong input fields.");
+	}
+
+	bool res{ LockKeyMap(lua_tostring(L, 1)) };
+	lua_pushboolean(L, res);
+	return 1;
+}
+
+extern "C" __declspec(dllexport) int __cdecl lua_ReleaseKeyMap(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 1)
+	{
+		luaL_error(L, "[inputHandler]: lua_ReleaseKeyMap: Invalid number of args.");
+	}
+
+	if (!lua_isstring(L, 1))
+	{
+		luaL_error(L, "[inputHandler]: lua_ReleaseKeyMap: Wrong input fields.");
+	}
+
+	bool res{ LockKeyMap(lua_tostring(L, 1)) };
+	lua_pushboolean(L, res);
+	return 1;
+}
+
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 2)
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterEvent: Invalid number of args.");
+	}
+
+	if (!lua_isstring(L, 1) || !lua_isinteger(L, 2))
+	{
+		luaL_error(L, "[inputHandler]: lua_ReleaseKeyMap: Wrong input fields.");
+	}
+
+	// the given integer reflects the register structure
+	// it is only very loosely coupled, since overwrites can happen all the time
+	// the functions will remain on the lua side, but C will simply stop calling them once they are overwritten
+
+	// ctrl << 24 | shift << 16 | alt << 8 | virtualKey
+	const char* mapName{ lua_tostring(L, 1) };
+	unsigned int regInt{ static_cast<unsigned int>(lua_tointeger(L, 1)) };
+	bool res{ RegisterEvent(mapName, regInt & 0x01000000, regInt & 0x00010000, regInt & 0x00000100, regInt & 0x000000FF,
+		[mapName, regInt](IHH::KeyEvent ev, int, HWND) {	// stores string copy -> could get a bit heavy, but for now ok
+			return handleLuaEvents(mapName, regInt, ev);
+		}
+	)};
+	lua_pushboolean(L, res);
+	return 1;
+}

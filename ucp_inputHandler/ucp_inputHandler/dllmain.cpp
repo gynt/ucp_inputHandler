@@ -26,6 +26,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
     LuaLog::Log(LuaLog::LOG_FATAL, "[InputHandler]: Failed to initialize the handler.");
   }
 
+  luaState = L; // keep ref to lua
+
   lua_newtable(L); // push a new table on the stack
 
   // simple replace
@@ -35,6 +37,18 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   // address
   lua_pushinteger(L, (DWORD)&crusaderKeyState);
   lua_setfield(L, -2, "address_FillWithKeyStateStructAddr");
+
+  // add functions
+  lua_newtable(L); // push function table
+  lua_pushinteger(L, (DWORD)LockKeyMap);
+  lua_setfield(L, -2, InputHandlerHeader::NAME_LOCK_KEY_MAP);
+  lua_pushinteger(L, (DWORD)ReleaseKeyMap);
+  lua_setfield(L, -2, InputHandlerHeader::NAME_RELEASE_KEY_MAP);
+  lua_pushinteger(L, (DWORD)RegisterEvent);
+  lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_EVENT);
+
+  // add table
+  lua_setfield(L, -2, "funcPtr");
 
   return 1;
 }
