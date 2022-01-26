@@ -31,18 +31,22 @@ namespace InputHandlerHeader
   // Cpp API
 
   using FuncKeyMap = bool(__stdcall*)(const char* name);
-  using FuncRegisterEvent = bool(__stdcall*)(const char* keyMapName, bool ctrl, bool shift,
-    bool alt, unsigned char virtualKey, KeyEventFunc&& func);
+  using FuncRegisterKeyComb = bool(__stdcall*)(const char* keyMapName, bool ctrl, bool shift,
+    bool alt, unsigned char virtualKey, const char* eventName);
+  using FuncRegisterEvent = bool(__stdcall*)(const char* keyMapName, const char* eventName,
+    const char* asciiTitle, KeyEventFunc&& func);
 
   inline constexpr char const* NAME_VERSION{ "0.0.1" };
 
   inline constexpr char const* NAME_MODULE{ "inputHandler" };
   inline constexpr char const* NAME_LOCK_KEY_MAP{ "_LockKeyMap@4" };
   inline constexpr char const* NAME_RELEASE_KEY_MAP{ "_ReleaseKeyMap@4" };
-  inline constexpr char const* NAME_REGISTER_EVENT{ "_RegisterEvent@24" };
+  inline constexpr char const* NAME_REGISTER_KEY_COMB{ "_RegisterKeyComb@24" };
+  inline constexpr char const* NAME_REGISTER_EVENT{ "_RegisterEvent@16" };
 
   inline FuncKeyMap LockKeyMap{ nullptr };
   inline FuncKeyMap ReleaseKeyMap{ nullptr };
+  inline FuncRegisterKeyComb RegisterKeyComb{ nullptr };
   inline FuncRegisterEvent RegisterEvent{ nullptr };
 
   inline constexpr char const* DEFAULT_KEY_MAP{ "" };
@@ -71,10 +75,12 @@ namespace InputHandlerHeader
     lua_pop(L, 1);  // remove value
     ReleaseKeyMap = (lua_getfield(L, -1, NAME_RELEASE_KEY_MAP) == LUA_TNUMBER) ? (FuncKeyMap)lua_tointeger(L, -1) : nullptr;
     lua_pop(L, 1);  // remove value
+    RegisterKeyComb = (lua_getfield(L, -1, NAME_REGISTER_KEY_COMB) == LUA_TNUMBER) ? (FuncRegisterKeyComb)lua_tointeger(L, -1) : nullptr;
+    lua_pop(L, 1);  // remove value
     RegisterEvent = (lua_getfield(L, -1, NAME_REGISTER_EVENT) == LUA_TNUMBER) ? (FuncRegisterEvent)lua_tointeger(L, -1) : nullptr;
     lua_pop(L, 3);  // remove value and all tables
 
-    return LockKeyMap && ReleaseKeyMap && RegisterEvent;
+    return LockKeyMap && ReleaseKeyMap && RegisterKeyComb && RegisterEvent;
   }
 }
 

@@ -20,17 +20,62 @@ struct CrusaderKeyState
 	BOOL v;
 };
 
+struct KeyEventReceiver
+{
+	const std::string asciiTitle;
+	const IHH::KeyEventFunc eventFunc;
+
+	KeyEventReceiver(const char* asciiTitle, IHH::KeyEventFunc&& func) :
+		asciiTitle{ asciiTitle }, eventFunc{ std::forward<IHH::KeyEventFunc>(func) } {};
+	~KeyEventReceiver() {};
+};
+
+class KeyToFuncRef
+{
+private:
+	std::string funcTitle;
+
+public:
+	const IHH::KeyEventFunc* eventFuncPtr{ nullptr };
+
+	KeyToFuncRef(const char* funcTitle) : funcTitle{ funcTitle }{};
+	KeyToFuncRef(KeyToFuncRef&& otherRef) : 
+		funcTitle{ std::forward<std::string>(otherRef.funcTitle) }, eventFuncPtr{}{};
+	~KeyToFuncRef() {};
+
+	const std::string& getEventName()
+	{
+		return funcTitle;
+	}
+
+	KeyToFuncRef& operator=(KeyToFuncRef&& other)
+	{
+		funcTitle = std::move(other.funcTitle);
+		eventFuncPtr = other.eventFuncPtr;
+		return *this;
+	}
+};
+
 class KeyMap
 {
 private:
-	std::unordered_map<unsigned int, IHH::KeyEventFunc> funcMap{};
+
+	// a delete is more complicated and involves invalidating all stored ptr
+	// at the moment ignored, but maybe for later
+	std::unordered_map<std::string, KeyEventReceiver> eventMap{};
+	std::unordered_map<unsigned int, KeyToFuncRef> keyCombMap{};
 
 public:
 	KeyMap() {};
 	~KeyMap() {};
 
-	IHH::KeyEventFunc* getHandlerFunc(IHH::KeyEvent ev);
-	bool registerKeyEvent(IHH::KeyEvent ev, IHH::KeyEventFunc&& func);
+	const IHH::KeyEventFunc* getHandlerFunc(IHH::KeyEvent ev);
+
+	// key combinations are overwritten without mercy, but maybe the keys are invalid
+	bool registerKeyCombination(IHH::KeyEvent structure, const char* eventName);
+
+	// event names however need to be unique, so it might get rejected
+	bool registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func);
 };
 
 /* variables*/
@@ -56,16 +101,19 @@ bool RetranslateToWindowProc(IHH::KeyEvent status, int windowProcPrio, HWND winH
 
 extern "C" __declspec(dllexport) bool __stdcall LockKeyMap(const char* name);
 extern "C" __declspec(dllexport) bool __stdcall ReleaseKeyMap(const char* name);
-extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMapName, bool ctrl, bool shift,
-	bool alt, unsigned char virtualKey, IHH::KeyEventFunc&& func);
+extern "C" __declspec(dllexport) bool __stdcall RegisterKeyComb(const char* keyMapName, bool ctrl, bool shift,
+	bool alt, unsigned char virtualKey, const char* eventName);
+extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMapName, const char* eventName,
+	const char* asciiTitle, IHH::KeyEventFunc&& func);
 
 /* LUA */
 
-bool handleLuaEvents(const char* mapRef, unsigned int mapInt, IHH::KeyEvent ev);
+bool handleLuaEvents(const char* mapRef, const char* eventName, IHH::KeyEvent ev);
 
 // need to be called with func ptr, will receive the events
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterControlFunc(lua_State * L);
 
 extern "C" __declspec(dllexport) int __cdecl lua_LockKeyMap(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_ReleaseKeyMap(lua_State * L);
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L);

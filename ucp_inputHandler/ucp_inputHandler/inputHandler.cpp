@@ -12,7 +12,7 @@ static std::unordered_map<std::string, KeyMap> keyMapMap{};
 static KeyMap* currentKeyMap{ nullptr };
 static KeyMap* defaultKeyMap{ nullptr };
 
-static std::unordered_map<VK::VirtualKey, IHH::KeyEventFunc*> currentEvents{};
+static std::unordered_map<VK::VirtualKey, const IHH::KeyEventFunc*> currentEvents{};
 
 static CrusaderKeyState nativeState{};	// half of this is not used
 static IHH::KeyEventFunc defaultFunc{ RetranslateToWindowProc };	// to be part of pipeline
@@ -25,11 +25,13 @@ bool InitStructures()
 	defaultKeyMap = currentKeyMap;
 
 	// test
-	IHH::KeyEvent ev{ VK::SPACE, IHH::KeyStatus::RESET, 1, 1, 1};
-	defaultKeyMap->registerKeyEvent(ev, [](IHH::KeyEvent, int, HWND) {
+	defaultKeyMap->registerKeyEvent("secretMsgCpp", "Secret Cpp Message", [](IHH::KeyEvent, int, HWND) {
 		LuaLog::Log(LuaLog::LOG_INFO, "I am a secret message.");
 		return false;
 	});
+
+	IHH::KeyEvent ev{ VK::SPACE, IHH::KeyStatus::RESET, 1, 1, 1 };
+	defaultKeyMap->registerKeyCombination(ev, "secretMsgCpp");
 
 	// here would be the place to create the redefines
 	// other funcs need to register themselves
@@ -84,7 +86,7 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 
 
 	// a lot safety catching needs to happen here
-
+	// num key changes also leads to locked keys
 
 
 	if (wParam <= VK::ALT && wParam >= VK::SHIFT)
@@ -158,7 +160,7 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 
 	// only key_downs from here
 
-	IHH::KeyEventFunc* currentFunc{ currentKeyMap->getHandlerFunc(currentEvent) };
+	const IHH::KeyEventFunc* currentFunc{ currentKeyMap->getHandlerFunc(currentEvent) };
 	if (!currentFunc)
 	{
 		if (currentKeyMap == defaultKeyMap)
@@ -240,19 +242,50 @@ bool RetranslateToWindowProc(IHH::KeyEvent status, int windowProcPrio, HWND winH
 }
 
 
-IHH::KeyEventFunc* KeyMap::getHandlerFunc(IHH::KeyEvent ev)
+const IHH::KeyEventFunc* KeyMap::getHandlerFunc(IHH::KeyEvent ev)
 {
 	unsigned int mapKey{ev.ctrlActive << 24 | ev.shiftActive << 16 | ev.altActive << 8 | ev.virtualKey };	// duplicate? would try to evade another func call, or not
-	auto res{ funcMap.find(mapKey) };
-	return res != funcMap.end() ? &res->second : nullptr;
+	
+	auto combIter{ keyCombMap.find(mapKey) };
+	if (combIter == keyCombMap.end())
+	{
+		return nullptr;
+	}
+
+	if (combIter->second.eventFuncPtr != nullptr)
+	{
+		return combIter->second.eventFuncPtr;
+	}
+
+	auto eventIter{ eventMap.find(combIter->second.getEventName()) };
+	if (eventIter == eventMap.end())
+	{
+		// this may or may not be a bad idea
+		LuaLog::Log(LuaLog::LOG_WARNING, "Encountered registered key combination without event.");
+		return nullptr;
+	}
+
+	combIter->second.eventFuncPtr = &eventIter->second.eventFunc;
+	return combIter->second.eventFuncPtr;
 }
 
-bool KeyMap::registerKeyEvent(IHH::KeyEvent ev, IHH::KeyEventFunc&& func)
+// key combinations are overwritten without mercy
+bool KeyMap::registerKeyCombination(IHH::KeyEvent structure, const char* eventName)
 {
-	unsigned int mapKey{ ev.ctrlActive << 24 | ev.shiftActive << 16 | ev.altActive << 8 | ev.virtualKey };	// duplicate? would try to evade another func call, or not
-	funcMap.insert_or_assign(mapKey, std::forward<IHH::KeyEventFunc>(func)); // should i trust the move stuff?
+	unsigned int mapKey{ structure.ctrlActive << 24 | structure.shiftActive << 16 |
+		structure.altActive << 8 | structure.virtualKey };	// duplicate? would try to evade another func call, or not
+	
+	keyCombMap.insert_or_assign(mapKey, KeyToFuncRef(eventName));
 	return true;	// could later return reject
 }
+
+// event names however need to be unique, so it might get rejected
+bool KeyMap::registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func)
+{
+	auto res{ eventMap.try_emplace(eventName, asciiTitle, std::forward<IHH::KeyEventFunc>(func)) }; // should i trust the move stuff?
+	return res.second;	// true if placed, false if one already present
+}
+
 
 
 /* exports */
@@ -288,26 +321,36 @@ extern "C" __declspec(dllexport) bool __stdcall ReleaseKeyMap(const char* name)
 	return true;
 }
 
-extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char * keyMapName, bool ctrl, bool shift,
-	bool alt, unsigned char virtualKey, IHH::KeyEventFunc&& func)
+extern "C" __declspec(dllexport) bool __stdcall RegisterKeyComb(const char* keyMapName, bool ctrl, bool shift,
+	bool alt, unsigned char virtualKey, const char* eventName)
 {
-	if (keyMapName == nullptr || func == nullptr)	// nullptr not allowed (hopefully it does not create move problems)
+	if (!(keyMapName && eventName))	// nullptr not allowed
 	{
 		return false;
 	}
-
 	auto iter{ keyMapMap.try_emplace(keyMapName).first };
 
-	// since the action is overwriting, there is no "false" return at the moment
-	// later, this might reject invalid keys
-	IHH::KeyEvent createEvent{ virtualKey, IHH::KeyStatus::RESET, ctrl, shift, alt };	// reset is just dummy
-	return (iter->second).registerKeyEvent(createEvent, std::forward<IHH::KeyEventFunc>(func));
+	IHH::KeyEvent createKeyComb{ virtualKey, IHH::KeyStatus::RESET, ctrl, shift, alt };	// reset is just dummy
+	return (iter->second).registerKeyCombination(createKeyComb, eventName);
 }
+
+extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMapName, const char* eventName,
+	const char* asciiTitle, IHH::KeyEventFunc && func)
+{
+	// nullptr not allowed (hopefully it does not create move problems)
+	if (! (keyMapName && eventName && asciiTitle && func))
+	{
+		return false;
+	}
+	auto iter{ keyMapMap.try_emplace(keyMapName).first };
+	return (iter->second).registerKeyEvent(eventName, asciiTitle, std::forward<IHH::KeyEventFunc>(func));
+}
+
+
 
 /* LUA */
 
-
-bool handleLuaEvents(const char* mapRef, unsigned int mapInt, IHH::KeyEvent ev)
+bool handleLuaEvents(const char* mapRef, const char* eventName, IHH::KeyEvent ev)
 {
 	if (luaState == nullptr || luaControlFuncIndex == 0)
 	{
@@ -317,9 +360,9 @@ bool handleLuaEvents(const char* mapRef, unsigned int mapInt, IHH::KeyEvent ev)
 
 	lua_rawgeti(luaState, LUA_REGISTRYINDEX, luaControlFuncIndex);
 	lua_pushstring(luaState, mapRef);
-	lua_pushinteger(luaState, mapInt);
+	lua_pushstring(luaState, eventName);
 
-	// basically like internal, but uses long long integer by givving the status at another position
+	// basically like internal, but uses long long integer by giving the status at another position
 	lua_pushinteger(luaState,
 		static_cast<long long>(ev.status) << 32 |
 		static_cast<long long>(ev.ctrlActive) << 24 |
@@ -399,6 +442,29 @@ extern "C" __declspec(dllexport) int __cdecl lua_ReleaseKeyMap(lua_State * L)
 	return 1;
 }
 
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 3)
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterEvent: Invalid number of args.");
+	}
+
+	if (!(lua_isstring(L, 1) && lua_isinteger(L, 2) && lua_isstring(L, 3)))
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterKeyComb: Wrong input fields.");
+	}
+
+	// the given integer reflects the register structure
+	// it is only very loosely coupled, since overwrites can happen all the time
+
+	unsigned int regInt{ static_cast<unsigned int>(lua_tointeger(L, 2)) };
+	bool res{ RegisterKeyComb(lua_tostring(L, 1), regInt & 0x01000000, regInt & 0x00010000,
+		regInt & 0x00000100, regInt & 0x000000FF, lua_tostring(L, 3)) };
+	lua_pushboolean(L, res);
+	return 1;
+}
+
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 {
 	int n{ lua_gettop(L) };    /* number of arguments */
@@ -407,21 +473,21 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 		luaL_error(L, "[inputHandler]: lua_RegisterEvent: Invalid number of args.");
 	}
 
-	if (!lua_isstring(L, 1) || !lua_isinteger(L, 2))
+	if (!(lua_isstring(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3)))
 	{
 		luaL_error(L, "[inputHandler]: lua_ReleaseKeyMap: Wrong input fields.");
 	}
 
-	// the given integer reflects the register structure
-	// it is only very loosely coupled, since overwrites can happen all the time
-	// the functions will remain on the lua side, but C will simply stop calling them once they are overwritten
+	// the lua function will store the map and the
+	// including lua, the string name is therefore stored 4! times by this module alone
+	// however, in theory it allows to easier delete events, since Cpp would not need to care about lua
+	// it is ok for now, until a change feels necessary
 
-	// ctrl << 24 | shift << 16 | alt << 8 | virtualKey
 	const char* mapName{ lua_tostring(L, 1) };
-	unsigned int regInt{ static_cast<unsigned int>(lua_tointeger(L, 2)) };
-	bool res{ RegisterEvent(mapName, regInt & 0x01000000, regInt & 0x00010000, regInt & 0x00000100, regInt & 0x000000FF,
-		[mapName, regInt](IHH::KeyEvent ev, int, HWND) {	// stores string copy -> could get a bit heavy, but for now ok
-			return handleLuaEvents(mapName, regInt, ev);
+	const char* eventName{ lua_tostring(L, 2) };
+	bool res{ RegisterEvent(mapName, eventName, lua_tostring(L, 3),
+		[mapName, eventName](IHH::KeyEvent ev, int, HWND) {	// stores string copies -> could get a bit heavy, but for now ok
+			return handleLuaEvents(mapName, eventName, ev);
 		}
 	)};
 	lua_pushboolean(L, res);
