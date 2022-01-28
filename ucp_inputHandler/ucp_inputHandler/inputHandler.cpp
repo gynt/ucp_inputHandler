@@ -9,8 +9,8 @@
 #include <unordered_map>
 
 static std::unordered_map<std::string, KeyMap> keyMapMap{};
-static KeyMap* currentKeyMap{ nullptr };
-static KeyMap* defaultKeyMap{ nullptr };
+static std::pair<const std::string, KeyMap>* currentKeyMapPair{ nullptr };
+static std::pair<const std::string, KeyMap>* defaultKeyMapPair{ nullptr };
 
 static std::unordered_map<VK::VirtualKey, const IHH::KeyEventFunc*> currentEvents{};
 
@@ -21,17 +21,17 @@ static IHH::KeyEventFunc defaultFunc{ RetranslateToWindowProc };	// to be part o
 bool InitStructures()
 {
 	auto iter{ keyMapMap.try_emplace(IHH::DEFAULT_KEY_MAP).first };	// no test, but it is first and must work
-	currentKeyMap = &iter->second;
-	defaultKeyMap = currentKeyMap;
+	currentKeyMapPair = &*iter;
+	defaultKeyMapPair = currentKeyMapPair;
 
 	// test
-	defaultKeyMap->registerKeyEvent("secretMsgCpp", "Secret Cpp Message", [](IHH::KeyEvent, int, HWND) {
+	defaultKeyMapPair->second.registerKeyEvent("secretMsgCpp", "Secret Cpp Message", [](IHH::KeyEvent, int, HWND) {
 		LuaLog::Log(LuaLog::LOG_INFO, "I am a secret message.");
 		return false;
 	});
 
 	IHH::KeyEvent ev{ VK::SPACE, IHH::KeyStatus::RESET, 1, 1, 1 };
-	defaultKeyMap->registerKeyCombination(ev, "secretMsgCpp");
+	defaultKeyMapPair->second.registerKeyCombination(ev, "secretMsgCpp");
 
 	// here would be the place to create the redefines
 	// other funcs need to register themselves
@@ -66,7 +66,14 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 			break;
 		case WM_SYSKEYDOWN:
 		case WM_KEYDOWN:
-			action = lParam & 0x40000000 ? IHH::KeyStatus::KEY_HOLD : IHH::KeyStatus::KEY_DOWN;
+			if (wParam == VK::NUMLOCK)
+			{
+				action = IHH::KeyStatus::RESET;	// numlock usage forces reset
+			}
+			else
+			{
+				action = lParam & 0x40000000 ? IHH::KeyStatus::KEY_HOLD : IHH::KeyStatus::KEY_DOWN;
+			}
 			break;
 		case WM_ACTIVATEAPP:
 			if (wParam)	// at the moment only on activation (like all input)
@@ -160,10 +167,10 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
 
 	// only key_downs from here
 
-	const IHH::KeyEventFunc* currentFunc{ currentKeyMap->getHandlerFunc(currentEvent) };
+	const IHH::KeyEventFunc* currentFunc{ currentKeyMapPair->second.getHandlerFunc(currentEvent) };
 	if (!currentFunc)
 	{
-		if (currentKeyMap == defaultKeyMap)
+		if (currentKeyMapPair == defaultKeyMapPair)
 		{
 			currentFunc = &defaultFunc;
 		}
@@ -252,21 +259,14 @@ const IHH::KeyEventFunc* KeyMap::getHandlerFunc(IHH::KeyEvent ev)
 		return nullptr;
 	}
 
-	if (combIter->second.eventFuncPtr != nullptr)
-	{
-		return combIter->second.eventFuncPtr;
-	}
-
-	auto eventIter{ eventMap.find(combIter->second.getEventName()) };
+	auto eventIter{ eventMap.find(combIter->second) };
 	if (eventIter == eventMap.end())
 	{
 		// this may or may not be a bad idea
 		LuaLog::Log(LuaLog::LOG_WARNING, "Encountered registered key combination without event.");
 		return nullptr;
 	}
-
-	combIter->second.eventFuncPtr = &eventIter->second.eventFunc;
-	return combIter->second.eventFuncPtr;
+	return &eventIter->second.eventFunc;
 }
 
 // key combinations are overwritten without mercy
@@ -275,49 +275,62 @@ bool KeyMap::registerKeyCombination(IHH::KeyEvent structure, const char* eventNa
 	unsigned int mapKey{ structure.ctrlActive << 24 | structure.shiftActive << 16 |
 		structure.altActive << 8 | structure.virtualKey };	// duplicate? would try to evade another func call, or not
 	
-	keyCombMap.insert_or_assign(mapKey, KeyToFuncRef(eventName));
+	auto nameIter{ KeyMap::nameSet.emplace(eventName).first };	// may discard created object, might need to happen anyway
+	keyCombMap.insert_or_assign(mapKey, &*nameIter);
 	return true;	// could later return reject
 }
 
 // event names however need to be unique, so it might get rejected
 bool KeyMap::registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func)
 {
-	auto res{ eventMap.try_emplace(eventName, asciiTitle, std::forward<IHH::KeyEventFunc>(func)) }; // should i trust the move stuff?
+	auto nameIter{ KeyMap::nameSet.emplace(eventName).first };	// may discard created object, might need to happen anyway
+	auto res{ eventMap.try_emplace(&*nameIter, asciiTitle, std::forward<IHH::KeyEventFunc>(func)) }; // should i trust the move stuff?
 	return res.second;	// true if placed, false if one already present
 }
 
+bool KeyMap::registerLuaKeyEvent(const std::string* mapKey, const char* eventName, const char* asciiTitle)
+{
+	const std::string* namePtr{ &*KeyMap::nameSet.emplace(eventName).first };	// may discard created object, might need to happen anyway
+	auto res{ eventMap.try_emplace(namePtr, asciiTitle,
+		[mapKey, namePtr](IHH::KeyEvent ev, int, HWND) // should i trust the move stuff?
+		{
+			return handleLuaEvents(mapKey, namePtr, ev);
+		}
+	)};
+	return res.second;	// true if placed, false if one already present
+}
 
 
 /* exports */
 
 extern "C" __declspec(dllexport) bool __stdcall LockKeyMap(const char* name)
 {
-	if (currentKeyMap != defaultKeyMap || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0)	// only if currently default and not default name
+	if (currentKeyMapPair != defaultKeyMapPair || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0)	// only if currently default and not default name
 	{
 		return false;
 	}
 
 	auto iter{ keyMapMap.try_emplace(name).first };
 	ResetEventsAndKeyState();
-	currentKeyMap = &(iter->second);
+	currentKeyMapPair = &*iter;
 	return true;
 }
 
 extern "C" __declspec(dllexport) bool __stdcall ReleaseKeyMap(const char* name)
 {
-	if (currentKeyMap == defaultKeyMap || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0 )	// only if not default and not default name
+	if (currentKeyMapPair == defaultKeyMapPair || strcmp(name, IHH::DEFAULT_KEY_MAP) == 0 )	// only if not default and not default name
 	{
 		return false;
 	}
 
 	auto iter{ keyMapMap.find(name) };
-	if (iter == keyMapMap.end() || &(iter->second) != currentKeyMap)	// if this is not the current map, do not release
+	if (iter == keyMapMap.end() || &*iter != currentKeyMapPair)	// if this is not the current map, do not release
 	{
 		return false;
 	}
 
 	ResetEventsAndKeyState();
-	currentKeyMap = defaultKeyMap;
+	currentKeyMapPair = defaultKeyMapPair;
 	return true;
 }
 
@@ -350,7 +363,7 @@ extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMap
 
 /* LUA */
 
-bool handleLuaEvents(const char* mapRef, const char* eventName, IHH::KeyEvent ev)
+bool handleLuaEvents(const std::string* mapRef, const std::string* eventName, IHH::KeyEvent ev)
 {
 	if (luaState == nullptr || luaControlFuncIndex == 0)
 	{
@@ -359,8 +372,8 @@ bool handleLuaEvents(const char* mapRef, const char* eventName, IHH::KeyEvent ev
 	}
 
 	lua_rawgeti(luaState, LUA_REGISTRYINDEX, luaControlFuncIndex);
-	lua_pushstring(luaState, mapRef);
-	lua_pushstring(luaState, eventName);
+	lua_pushstring(luaState, mapRef->c_str());	// still copies of the string
+	lua_pushstring(luaState, eventName->c_str());
 
 	// basically like internal, but uses long long integer by giving the status at another position
 	lua_pushinteger(luaState,
@@ -483,13 +496,8 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 	// however, in theory it allows to easier delete events, since Cpp would not need to care about lua
 	// it is ok for now, until a change feels necessary
 
-	const char* mapName{ lua_tostring(L, 1) };
-	const char* eventName{ lua_tostring(L, 2) };
-	bool res{ RegisterEvent(mapName, eventName, lua_tostring(L, 3),
-		[mapName, eventName](IHH::KeyEvent ev, int, HWND) {	// stores string copies -> could get a bit heavy, but for now ok
-			return handleLuaEvents(mapName, eventName, ev);
-		}
-	)};
+	auto iter{ keyMapMap.try_emplace(lua_tostring(L, 1)).first };
+	bool res{ iter->second.registerLuaKeyEvent(&iter->first, lua_tostring(L, 2), lua_tostring(L, 3)) };
 	lua_pushboolean(L, res);
 	return 1;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 
 #include "keyEnum.h"
@@ -30,40 +31,16 @@ struct KeyEventReceiver
 	~KeyEventReceiver() {};
 };
 
-class KeyToFuncRef
-{
-private:
-	std::string funcTitle;
-
-public:
-	const IHH::KeyEventFunc* eventFuncPtr{ nullptr };
-
-	KeyToFuncRef(const char* funcTitle) : funcTitle{ funcTitle }{};
-	KeyToFuncRef(KeyToFuncRef&& otherRef) : 
-		funcTitle{ std::forward<std::string>(otherRef.funcTitle) }, eventFuncPtr{}{};
-	~KeyToFuncRef() {};
-
-	const std::string& getEventName()
-	{
-		return funcTitle;
-	}
-
-	KeyToFuncRef& operator=(KeyToFuncRef&& other)
-	{
-		funcTitle = std::move(other.funcTitle);
-		eventFuncPtr = other.eventFuncPtr;
-		return *this;
-	}
-};
 
 class KeyMap
 {
 private:
+	inline static std::unordered_set<std::string> nameSet{};	// will contain names
 
 	// a delete is more complicated and involves invalidating all stored ptr
 	// at the moment ignored, but maybe for later
-	std::unordered_map<std::string, KeyEventReceiver> eventMap{};
-	std::unordered_map<unsigned int, KeyToFuncRef> keyCombMap{};
+	std::unordered_map<const std::string*, KeyEventReceiver> eventMap{};
+	std::unordered_map<unsigned int, const std::string*> keyCombMap{};
 
 public:
 	KeyMap() {};
@@ -76,6 +53,9 @@ public:
 
 	// event names however need to be unique, so it might get rejected
 	bool registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func);
+
+	// treated differently, to avoid double querying
+	bool registerLuaKeyEvent(const std::string* mapKey, const char* eventName, const char* asciiTitle);
 };
 
 /* variables*/
@@ -108,7 +88,7 @@ extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMap
 
 /* LUA */
 
-bool handleLuaEvents(const char* mapRef, const char* eventName, IHH::KeyEvent ev);
+bool handleLuaEvents(const std::string* mapRef, const std::string* eventName, IHH::KeyEvent ev);
 
 // need to be called with func ptr, will receive the events
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterControlFunc(lua_State * L);
