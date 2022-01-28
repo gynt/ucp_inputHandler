@@ -45,14 +45,14 @@ end
 
 local funcTable = {}
 
-local function controlFunc(keyMapName, refNum, state)
+local function controlFunc(keyMapName, eventFuncName, state)
   local mapTable = funcTable[keyMapName]
   if mapTable == nil then
     log(WARNING, "[inputHandler]: Unable to react to key event. Requested key table not found.")
     return false
   end
   
-  local func = mapTable[refNum]
+  local func = mapTable[eventFuncName]
   if func == nil then
     log(WARNING, "[inputHandler]: Unable to react to key event. Requested event function not found.")
     return false
@@ -111,21 +111,24 @@ exports.enable = function(self, moduleConfig, globalConfig)
   -- TODO: there should be a table with keys, maybe
   self.status = status -- status enums, basically
 
-  self.RegisterEvent = function(keyMapName, ctrlActive, shiftActive, altActive, virtualKey, funcToCall)
-    local regInt = toIntBoolean(ctrlActive) << 24 | toIntBoolean(shiftActive) << 16 | toIntBoolean(altActive) << 8 | (virtualKey & 0xFF)
-
-    if requireTable.lua_RegisterEvent(keyMapName, regInt) then -- register handle before function
+  self.RegisterEvent = function(keyMapName, eventName, asciiTitle, funcToCall)
+    if requireTable.lua_RegisterEvent(keyMapName, eventName, asciiTitle) then -- register handle before function
       local mapTable = funcTable[keyMapName]
       if mapTable == nil then
         funcTable[keyMapName] = {}
         mapTable = funcTable[keyMapName]
       end
         
-      mapTable[regInt] = funcToCall -- funcs are stored in lua, since I do not want to generate a ton of never lifted references
+      mapTable[eventName] = funcToCall -- funcs are stored in lua, since I do not want to generate a ton of never lifted references
       return true
     else
       return false
     end
+  end
+
+  self.RegisterKeyComb = function(keyMapName, ctrlActive, shiftActive, altActive, virtualKey, eventName)
+    local regInt = toIntBoolean(ctrlActive) << 24 | toIntBoolean(shiftActive) << 16 | toIntBoolean(altActive) << 8 | (virtualKey & 0xFF)
+    return requireTable.lua_RegisterKeyComb(keyMapName, regInt, eventName)
   end
   
   self.DEFAULT_KEY_MAP = ""
@@ -152,7 +155,7 @@ exports.enable = function(self, moduleConfig, globalConfig)
   
   --[[ test code ]]--
 
-  self.RegisterEvent(self.DEFAULT_KEY_MAP, true, true, false, 0x20,
+  self.RegisterEvent(self.DEFAULT_KEY_MAP, "secretMsgLua", "Secret Lua Message",
     function(event)
       if event:statusNum() == self.status.KEY_DOWN then
         log(INFO, "I am a secret LUA message.")
@@ -161,6 +164,7 @@ exports.enable = function(self, moduleConfig, globalConfig)
       return false
     end
   )
+  self.RegisterKeyComb(self.DEFAULT_KEY_MAP, true, true, false, 0x20, "secretMsgLua")
 end
 
 exports.disable = function(self, moduleConfig, globalConfig) error("not implemented") end

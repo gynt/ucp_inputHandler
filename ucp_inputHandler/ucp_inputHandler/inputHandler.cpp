@@ -481,7 +481,7 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L)
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 {
 	int n{ lua_gettop(L) };    /* number of arguments */
-	if (n != 2)
+	if (n != 3)
 	{
 		luaL_error(L, "[inputHandler]: lua_RegisterEvent: Invalid number of args.");
 	}
