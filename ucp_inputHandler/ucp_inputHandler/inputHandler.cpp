@@ -8,6 +8,7 @@
 #include "keyEnum.h"
 #include <unordered_map>
 
+
 static std::unordered_map<std::string, KeyMap> keyMapMap{};
 static std::pair<const std::string, KeyMap>* currentKeyMapPair{ nullptr };
 static std::pair<const std::string, KeyMap>* defaultKeyMapPair{ nullptr };
@@ -25,8 +26,24 @@ bool InitStructures()
 	defaultKeyMapPair = currentKeyMapPair;
 
 	// test
-	defaultKeyMapPair->second.registerKeyEvent("secretMsgCpp", "Secret Cpp Message", [](IHH::KeyEvent, int, HWND) {
-		LuaLog::Log(LuaLog::LOG_INFO, "I am a secret message.");
+	defaultKeyMapPair->second.registerKeyEvent("secretMsgCpp", "Secret Cpp Message", [](IHH::KeyEvent ev, int, HWND) {
+		switch (ev.status)
+		{
+			case IHH::KeyStatus::RESET:
+				LuaLog::Log(LuaLog::LOG_INFO, "I am a secret reset.");
+				break;
+			case IHH::KeyStatus::KEY_DOWN:
+				LuaLog::Log(LuaLog::LOG_INFO, "I am a secret key down.");
+				break;
+			case IHH::KeyStatus::KEY_HOLD:
+				LuaLog::Log(LuaLog::LOG_INFO, "I am a secret key hold.");
+				break;
+			case IHH::KeyStatus::KEY_UP:
+				LuaLog::Log(LuaLog::LOG_INFO, "I am a secret key up.");
+				break;
+			default:
+				break;
+		}
 		return false;
 	});
 
@@ -424,12 +441,12 @@ extern "C" __declspec(dllexport) int __cdecl lua_LockKeyMap(lua_State * L)
 	int n{ lua_gettop(L) };    /* number of arguments */
 	if (n != 1)
 	{
-		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Invalid number of args.");
+		luaL_error(L, "[inputHandler]: lua_LockKeyMap: Invalid number of args.");
 	}
 
 	if (!lua_isstring(L, 1))
 	{
-		luaL_error(L, "[inputHandler]: lua_RegisterControlFunc: Wrong input fields.");
+		luaL_error(L, "[inputHandler]: lua_LockKeyMap: Wrong input fields.");
 	}
 
 	bool res{ LockKeyMap(lua_tostring(L, 1)) };
@@ -460,7 +477,7 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L)
 	int n{ lua_gettop(L) };    /* number of arguments */
 	if (n != 3)
 	{
-		luaL_error(L, "[inputHandler]: lua_RegisterEvent: Invalid number of args.");
+		luaL_error(L, "[inputHandler]: lua_RegisterKeyComb: Invalid number of args.");
 	}
 
 	if (!(lua_isstring(L, 1) && lua_isinteger(L, 2) && lua_isstring(L, 3)))
@@ -491,13 +508,37 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 		luaL_error(L, "[inputHandler]: lua_ReleaseKeyMap: Wrong input fields.");
 	}
 
-	// the lua function will store the map and the
-	// including lua, the string name is therefore stored 4! times by this module alone
-	// however, in theory it allows to easier delete events, since Cpp would not need to care about lua
-	// it is ok for now, until a change feels necessary
-
 	auto iter{ keyMapMap.try_emplace(lua_tostring(L, 1)).first };
 	bool res{ iter->second.registerLuaKeyEvent(&iter->first, lua_tostring(L, 2), lua_tostring(L, 3)) };
+	lua_pushboolean(L, res);
+	return 1;
+}
+
+// TODO?: C endpoint? or rather only for input module
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeySwap(lua_State * L)
+{
+	int n{ lua_gettop(L) };    /* number of arguments */
+	if (n != 3)
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterKeySwap: Invalid number of args.");
+	}
+
+	if (!(lua_isstring(L, 1) && lua_isinteger(L, 2) && lua_isstring(L, 3)))
+	{
+		luaL_error(L, "[inputHandler]: lua_RegisterKeySwap: Wrong input fields.");
+	}
+
+	auto iter{ keyMapMap.try_emplace(lua_tostring(L, 1)).first };
+	bool res{ iter->second.registerKeyEvent(lua_tostring(L, 3), lua_tostring(L, 3), 
+		[toEv{ lua_tointeger(L, 2) }](IHH::KeyEvent ev, int prio, HWND hwnd) // should i trust the move stuff?
+		{
+			ev.ctrlActive = toEv & 0x01000000 ? 1 : 0;
+			ev.shiftActive = toEv & 0x00010000 ? 1 : 0;
+			ev.altActive = toEv & 0x00000100 ? 1 : 0;
+			ev.virtualKey = toEv & 0x000000FF;
+			return RetranslateToWindowProc(ev, prio, hwnd);
+		} 
+	)};
 	lua_pushboolean(L, res);
 	return 1;
 }

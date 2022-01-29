@@ -67,6 +67,9 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   lua_pushcfunction(L, lua_RegisterEvent);
   lua_setfield(L, -2, "lua_RegisterEvent");
 
+  lua_pushcfunction(L, lua_RegisterKeySwap);
+  lua_setfield(L, -2, "lua_RegisterKeySwap");
+
   return 1;
 }
 

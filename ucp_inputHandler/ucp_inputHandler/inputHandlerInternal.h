@@ -97,3 +97,5 @@ extern "C" __declspec(dllexport) int __cdecl lua_LockKeyMap(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_ReleaseKeyMap(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L);
+
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeySwap(lua_State * L);
