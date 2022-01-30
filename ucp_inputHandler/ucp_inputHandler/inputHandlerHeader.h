@@ -36,7 +36,7 @@ namespace InputHandlerHeader
   using FuncRegisterEvent = bool(__stdcall*)(const char* keyMapName, const char* eventName,
     const char* asciiTitle, KeyEventFunc&& func);
 
-  inline constexpr char const* NAME_VERSION{ "0.0.1" };
+  inline constexpr char const* NAME_VERSION{ "0.1.0" };
 
   inline constexpr char const* NAME_MODULE{ "inputHandler" };
   inline constexpr char const* NAME_LOCK_KEY_MAP{ "_LockKeyMap@4" };

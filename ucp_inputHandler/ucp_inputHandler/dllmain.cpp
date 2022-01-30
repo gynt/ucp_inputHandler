@@ -38,12 +38,18 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   lua_pushinteger(L, (DWORD)&crusaderKeyState);
   lua_setfield(L, -2, "address_FillWithKeyStateStructAddr");
 
+  // address
+  lua_pushinteger(L, (DWORD)&crusaderArrowKeyState);
+  lua_setfield(L, -2, "address_FillWithArrowKeyStateStructAddr");
+
   // add functions
   lua_newtable(L); // push function table
   lua_pushinteger(L, (DWORD)LockKeyMap);
   lua_setfield(L, -2, InputHandlerHeader::NAME_LOCK_KEY_MAP);
   lua_pushinteger(L, (DWORD)ReleaseKeyMap);
   lua_setfield(L, -2, InputHandlerHeader::NAME_RELEASE_KEY_MAP);
+  lua_pushinteger(L, (DWORD)RegisterKeyComb);
+  lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_KEY_COMB);
   lua_pushinteger(L, (DWORD)RegisterEvent);
   lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_EVENT);
 
@@ -67,8 +73,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   lua_pushcfunction(L, lua_RegisterEvent);
   lua_setfield(L, -2, "lua_RegisterEvent");
 
-  lua_pushcfunction(L, lua_RegisterKeySwap);
-  lua_setfield(L, -2, "lua_RegisterKeySwap");
+  lua_pushcfunction(L, lua_RegisterKeyAlias);
+  lua_setfield(L, -2, "lua_RegisterKeyAlias");
 
   return 1;
 }

@@ -353,6 +353,13 @@ exports.enable = function(self, moduleConfig, globalConfig)
   end
   keyStateStructAddr = core.readInteger(keyStateStructAddr + 2) -- move pointer to address, then read the value
   
+  local arrowKeyStructAddr = core.AOBScan("ff 24 85 ? ? ? 00 89 1d ? ? ? 01 e9 ? ? ? ff", 0x400000)
+  if arrowKeyStructAddr == nil then
+    print("'inputHandler' was unable to find the arrow key struct of Crusader.")
+    error("'inputHandler' can not be initialized.")
+  end
+  arrowKeyStructAddr = core.readInteger(arrowKeyStructAddr + 9) -- move pointer to address, then read the value
+  
   --[[
     Note: Crusader has an additional function that sets key states: 00468a10.
     But the only known reference so far is from a jump table and it is close to some "useless" functions. So maybe unused?
@@ -397,25 +404,39 @@ exports.enable = function(self, moduleConfig, globalConfig)
     return requireTable.lua_RegisterKeyComb(keyMapName, regInt, eventName)
   end
   
-  self.RegisterKeySwap = function(fromStr, toStr)
+  self.RegisterKeyCombStr = function(keyMapName, eventName, keyStr)
+    local status, res = pcall(keyStringToInfo, keyStr)
+    if not status then
+      log(WARNING, "[inputHandler]: Key combination error: " .. keyStr .. ": " .. res)
+      return false
+    end
+    
+    if not self.RegisterKeyComb(keyMapName, res.ctrl, res.shift, res.alt, res.key, eventName) then
+      log(WARNING, "[inputHandler]: Unable to register key combination '" .. keyStr .. "' for '" .. eventName .. "' in key map: " .. keyMapName)
+      return false
+    end
+    return true
+  end
   
-    local statusFrom, resFrom = pcall(keyStringToInfo, fromStr)
-    if not statusFrom then
-      log(WARNING, "[inputHandler]: Key swap from error: " .. fromStr .. ": " .. resFrom)
+  self.RegisterKeyAlias = function(ofStr, isStr)
+  
+    local statusOf, resOf = pcall(keyStringToInfo, ofStr)
+    if not statusOf then
+      log(WARNING, "[inputHandler]: Key 'alias of' error: " .. ofStr .. ": " .. resOf)
       return false
     end
     
-    local statusTo, resTo = pcall(keyStringToInfo, toStr)
-    if not statusTo then
-      log(WARNING, "[inputHandler]: Key swap to error: " .. toStr .. ": " .. resTo)
+    local statusIs, resIs = pcall(keyStringToInfo, isStr)
+    if not statusIs then
+      log(WARNING, "[inputHandler]: Key 'alias is' error: " .. isStr .. ": " .. resIs)
       return false
     end
     
-    local fromKeys = toIntBoolean(resFrom.ctrl) << 24 | toIntBoolean(resFrom.shift) << 16 | toIntBoolean(resFrom.alt) << 8 | (resFrom.key & 0xFF)
-    requireTable.lua_RegisterKeySwap(self.DEFAULT_KEY_MAP, fromKeys, fromStr) -- ret not important, since if it fails, we assume already present
+    local ofKeys = toIntBoolean(resOf.ctrl) << 24 | toIntBoolean(resOf.shift) << 16 | toIntBoolean(resOf.alt) << 8 | (resOf.key & 0xFF)
+    requireTable.lua_RegisterKeyAlias(self.DEFAULT_KEY_MAP, ofKeys, ofStr) -- ret not important, since if it fails, we assume already present
     
-    if not self.RegisterKeyComb(self.DEFAULT_KEY_MAP, resTo.ctrl, resTo.shift, resTo.alt, resTo.key, fromStr) then
-      log(WARNING, "[inputHandler]: Unable to register key swap key combination: " .. fromStr " .. to " .. toStr)
+    if not self.RegisterKeyComb(self.DEFAULT_KEY_MAP, resIs.ctrl, resIs.shift, resIs.alt, resIs.key, ofStr) then
+      log(WARNING, "[inputHandler]: Unable to register key alias key combination: " .. ofStr .. " to " .. toStr)
       return false
     end
     return true
@@ -436,23 +457,36 @@ exports.enable = function(self, moduleConfig, globalConfig)
     {requireTable.funcAddress_GetAsyncKeyState}
   )
   
-  -- gives the address of crusaders key state table to the module
+  -- gives the address of crusaders key state struct to the module
   core.writeCode(
     requireTable.address_FillWithKeyStateStructAddr,
     {keyStateStructAddr}
   )
   
+    -- gives the address of crusaders arrow key state struct to the module
+  core.writeCode(
+    requireTable.address_FillWithArrowKeyStateStructAddr,
+    {arrowKeyStructAddr}
+  )
+  
   
   --[[ use config ]]--
   
-  if moduleConfig.swap ~= nil then
-    for from, to in pairs(moduleConfig.swap) do
-      self.RegisterKeySwap(from, to)
+  if moduleConfig.alias ~= nil then
+    for keyComb, shouldBe in pairs(moduleConfig.alias) do
+      self.RegisterKeyAlias(shouldBe, keyComb)
     end
   end
   
-  
-  
+  if moduleConfig.functions ~= nil then
+    for keyMapName, funcComb in pairs(moduleConfig.functions) do
+      for comb, funcName in pairs(funcComb) do
+        self.RegisterKeyCombStr(keyMapName, funcName, comb)
+      end
+    end
+  end
+
+
   --[[ test code ]]--
 
   self.RegisterEvent(self.DEFAULT_KEY_MAP, "secretMsgLua", "Secret Lua Message",
@@ -464,13 +498,6 @@ exports.enable = function(self, moduleConfig, globalConfig)
       return false
     end
   )
-  
-  local status, res = pcall(keyStringToInfo, "CONTROL+SHIFT+SPACE")
-  if status then
-    self.RegisterKeyComb(self.DEFAULT_KEY_MAP, res.ctrl, res.shift, res.alt, res.key, "secretMsgLua")
-  else
-    log(WARNING, res) -- in this case error
-  end
 end
 
 exports.disable = function(self, moduleConfig, globalConfig) error("not implemented") end

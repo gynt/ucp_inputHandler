@@ -21,6 +21,15 @@ struct CrusaderKeyState
   BOOL v;
 };
 
+// used to reset also them
+struct CrusaderArrowKeyState
+{
+  BOOL right;
+  BOOL left;
+  BOOL down;
+  BOOL up;
+};
+
 struct KeyEventReceiver
 {
   const std::string asciiTitle;
@@ -61,6 +70,7 @@ public:
 /* variables*/
 
 inline CrusaderKeyState* crusaderKeyState{ nullptr };
+inline CrusaderArrowKeyState* crusaderArrowKeyState{ nullptr };
 
 inline lua_State* luaState{ nullptr };  // needed for lua API
 inline int luaControlFuncIndex{ 0 };
@@ -98,4 +108,4 @@ extern "C" __declspec(dllexport) int __cdecl lua_ReleaseKeyMap(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyComb(lua_State * L);
 extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L);
 
-extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeySwap(lua_State * L);
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyAlias(lua_State * L);

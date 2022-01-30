@@ -47,12 +47,6 @@ bool InitStructures()
     return false;
   });
 
-  IHH::KeyEvent ev{ VK::SPACE, IHH::KeyStatus::RESET, 1, 1, 1 };
-  defaultKeyMapPair->second.registerKeyCombination(ev, "secretMsgCpp");
-
-  // here would be the place to create the redefines
-  // other funcs need to register themselves
-
   return true;
 }
 
@@ -212,7 +206,9 @@ void ResetEventsAndKeyState()
     (*iter->second)(resetEvent, 0, 0);  // ignore output, we are resetting
     iter = currentEvents.erase(iter); // delete, since we are done
   }
-  ZeroMemory(crusaderKeyState, sizeof(CrusaderKeyState)); // zero key state object of stronghold should be enough
+  // zero key state objects of stronghold
+  ZeroMemory(crusaderKeyState, sizeof(CrusaderKeyState));
+  ZeroMemory(crusaderArrowKeyState, sizeof(CrusaderArrowKeyState));
 }
 
 
@@ -515,17 +511,17 @@ extern "C" __declspec(dllexport) int __cdecl lua_RegisterEvent(lua_State * L)
 }
 
 // TODO?: C endpoint? or rather only for input module
-extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeySwap(lua_State * L)
+extern "C" __declspec(dllexport) int __cdecl lua_RegisterKeyAlias(lua_State * L)
 {
   int n{ lua_gettop(L) };    /* number of arguments */
   if (n != 3)
   {
-    luaL_error(L, "[inputHandler]: lua_RegisterKeySwap: Invalid number of args.");
+    luaL_error(L, "[inputHandler]: lua_RegisterKeyAlias: Invalid number of args.");
   }
 
   if (!(lua_isstring(L, 1) && lua_isinteger(L, 2) && lua_isstring(L, 3)))
   {
-    luaL_error(L, "[inputHandler]: lua_RegisterKeySwap: Wrong input fields.");
+    luaL_error(L, "[inputHandler]: lua_RegisterKeyAlias: Wrong input fields.");
   }
 
   auto iter{ keyMapMap.try_emplace(lua_tostring(L, 1)).first };
