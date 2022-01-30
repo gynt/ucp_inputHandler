@@ -13,56 +13,56 @@ namespace IHH = InputHandlerHeader; // easier to use
 
 struct CrusaderKeyState
 {
-	BOOL unknown;		// for examples set to 1 if alt encountered, usage unknown, maybe debug originally?
-	BOOL ctrl;
-	BOOL shift;
-	BOOL alt;
-	BOOL downArrow;
-	BOOL v;
+  BOOL unknown;   // for examples set to 1 if alt encountered, usage unknown, maybe debug originally?
+  BOOL ctrl;
+  BOOL shift;
+  BOOL alt;
+  BOOL downArrow;
+  BOOL v;
 };
 
 struct KeyEventReceiver
 {
-	const std::string asciiTitle;
-	const IHH::KeyEventFunc eventFunc;
+  const std::string asciiTitle;
+  const IHH::KeyEventFunc eventFunc;
 
-	KeyEventReceiver(const char* asciiTitle, IHH::KeyEventFunc&& func) :
-		asciiTitle{ asciiTitle }, eventFunc{ std::forward<IHH::KeyEventFunc>(func) } {};
-	~KeyEventReceiver() {};
+  KeyEventReceiver(const char* asciiTitle, IHH::KeyEventFunc&& func) :
+    asciiTitle{ asciiTitle }, eventFunc{ std::forward<IHH::KeyEventFunc>(func) } {};
+  ~KeyEventReceiver() {};
 };
 
 
 class KeyMap
 {
 private:
-	inline static std::unordered_set<std::string> nameSet{};	// will contain names
+  inline static std::unordered_set<std::string> nameSet{};  // will contain names
 
-	// a delete is more complicated and involves invalidating all stored ptr
-	// at the moment ignored, but maybe for later
-	std::unordered_map<const std::string*, KeyEventReceiver> eventMap{};
-	std::unordered_map<unsigned int, const std::string*> keyCombMap{};
+  // a delete is more complicated and involves invalidating all stored ptr
+  // at the moment ignored, but maybe for later
+  std::unordered_map<const std::string*, KeyEventReceiver> eventMap{};
+  std::unordered_map<unsigned int, const std::string*> keyCombMap{};
 
 public:
-	KeyMap() {};
-	~KeyMap() {};
+  KeyMap() {};
+  ~KeyMap() {};
 
-	const IHH::KeyEventFunc* getHandlerFunc(IHH::KeyEvent ev);
+  const IHH::KeyEventFunc* getHandlerFunc(IHH::KeyEvent ev);
 
-	// key combinations are overwritten without mercy, but maybe the keys are invalid
-	bool registerKeyCombination(IHH::KeyEvent structure, const char* eventName);
+  // key combinations are overwritten without mercy, but maybe the keys are invalid
+  bool registerKeyCombination(IHH::KeyEvent structure, const char* eventName);
 
-	// event names however need to be unique, so it might get rejected
-	bool registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func);
+  // event names however need to be unique, so it might get rejected
+  bool registerKeyEvent(const char* eventName, const char* asciiTitle, IHH::KeyEventFunc&& func);
 
-	// treated differently, to avoid double querying
-	bool registerLuaKeyEvent(const std::string* mapKey, const char* eventName, const char* asciiTitle);
+  // treated differently, to avoid double querying
+  bool registerLuaKeyEvent(const std::string* mapKey, const char* eventName, const char* asciiTitle);
 };
 
 /* variables*/
 
 inline CrusaderKeyState* crusaderKeyState{ nullptr };
 
-inline lua_State* luaState{ nullptr };	// needed for lua API
+inline lua_State* luaState{ nullptr };  // needed for lua API
 inline int luaControlFuncIndex{ 0 };
 
 /* functions */
@@ -82,9 +82,9 @@ bool RetranslateToWindowProc(IHH::KeyEvent status, int windowProcPrio, HWND winH
 extern "C" __declspec(dllexport) bool __stdcall LockKeyMap(const char* name);
 extern "C" __declspec(dllexport) bool __stdcall ReleaseKeyMap(const char* name);
 extern "C" __declspec(dllexport) bool __stdcall RegisterKeyComb(const char* keyMapName, bool ctrl, bool shift,
-	bool alt, unsigned char virtualKey, const char* eventName);
+  bool alt, unsigned char virtualKey, const char* eventName);
 extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMapName, const char* eventName,
-	const char* asciiTitle, IHH::KeyEventFunc&& func);
+  const char* asciiTitle, IHH::KeyEventFunc&& func);
 
 /* LUA */
 
