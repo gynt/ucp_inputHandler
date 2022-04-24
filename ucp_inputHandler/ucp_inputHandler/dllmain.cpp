@@ -52,6 +52,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_inputHandler(lua_State * L)
   lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_KEY_COMB);
   lua_pushinteger(L, (DWORD)RegisterEvent);
   lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_EVENT);
+  lua_pushinteger(L, (DWORD)RegisterRawEvent);
+  lua_setfield(L, -2, InputHandlerHeader::NAME_REGISTER_RAW_EVENT);
 
   // add table
   lua_setfield(L, -2, "funcPtr");

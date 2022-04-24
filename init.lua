@@ -463,7 +463,7 @@ exports.enable = function(self, moduleConfig, globalConfig)
     {keyStateStructAddr}
   )
   
-    -- gives the address of crusaders arrow key state struct to the module
+  -- gives the address of crusaders arrow key state struct to the module
   core.writeCode(
     requireTable.address_FillWithArrowKeyStateStructAddr,
     {arrowKeyStructAddr}

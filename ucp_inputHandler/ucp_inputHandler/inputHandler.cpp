@@ -372,6 +372,13 @@ extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMap
   return (iter->second).registerKeyEvent(eventName, asciiTitle, std::forward<IHH::KeyEventFunc>(func));
 }
 
+// takes a raw unction ptr and wraps in in a std::function to make raw machine code bindings easier
+extern "C" __declspec(dllexport) bool __stdcall RegisterRawEvent(const char* keyMapName, const char* eventName,
+  const char* asciiTitle, IHH::RawKeyEventFunc* func)
+{
+  return RegisterEvent(keyMapName, eventName, asciiTitle, func);
+}
+
 
 
 /* LUA */

@@ -95,6 +95,8 @@ extern "C" __declspec(dllexport) bool __stdcall RegisterKeyComb(const char* keyM
   bool alt, unsigned char virtualKey, const char* eventName);
 extern "C" __declspec(dllexport) bool __stdcall RegisterEvent(const char* keyMapName, const char* eventName,
   const char* asciiTitle, IHH::KeyEventFunc&& func);
+extern "C" __declspec(dllexport) bool __stdcall RegisterRawEvent(const char* keyMapName, const char* eventName,
+  const char* asciiTitle, IHH::RawKeyEventFunc* func);
 
 /* LUA */
 
