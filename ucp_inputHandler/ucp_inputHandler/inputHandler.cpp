@@ -168,7 +168,9 @@ LRESULT __stdcall ProcessInput(int reservedCurrentPrio, HWND hwnd, UINT uMsg, WP
     {
       currentEvents.erase(runningEvent);  // currently erasing -> if it turns out this is too slow, maybe switch to some approach that keeps the registered
 
-      if (res)
+      // only a hold state should be allowed to transform to a key down, since a key up to a key down would never receive a key up
+      // res was already tested before
+      if (action == IHH::KeyStatus::KEY_HOLD)
       {
         return ProcessInput(reservedCurrentPrio, hwnd, WM_KEYDOWN, wParam, 0);  // sets it to a new keyDown, other stuff is context generated
       }
