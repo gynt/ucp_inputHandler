@@ -15,6 +15,8 @@ The user can now register certain events by name and bind them to specific input
 As a second functionality, the handler also allows to create an alias for an input.
 Inputs that are not handled are given to the Crusader input function instead.
 If the input was registered as an alias, it is transformed to the specific other input for the backend.
+Since the CHAR messages are generated before reaching the handler function, text input functions normally.
+However, issues can happen if aliases are set that point to keys that interact with text, like *Enter*.
 
 At the moment, only keyboard inputs are handled at all.
 Additionally, the module includes a small fix regarding stuck arrow keys on focus switch.
@@ -32,7 +34,7 @@ Other, eastern versions of 1.41 might work.
 The module has the [winProcHandler](https://github.com/TheRedDaemon/ucp_winProcHandler) as dependency and it registers its winProc function with an early **-50000** priority (smaller means earlier).
 
 
-### C++-Functions
+### C++-Exports
 
 t the time of creation, C functions would need to be parsed through lua in the form of numbers. To make using the module easier, the header [inputHandlerHeader.h](ucp_inputHandler/ucp_inputHandler/inputHandlerHeader.h) can be copied into your project.  
 It is used by calling the function *initModuleFunctions(lua_state * )* during the lua require call of the dll. It tries to receive the provided functions and returns *true* if successful. For this to work, winProcHandler needs to be a dependency.
@@ -41,7 +43,7 @@ The provided functions are the following:
 * *bool LockKeyMap(const char\* keyMapName)*  
   A function of the module is to allow the selection of a key-map.
   If a key map is selected, only input events of the specific key map are handled.
-  Not input is passed to Crusaders own handler.
+  No input is passed to Crusaders own handler.
   Maps are identified by name. A call to this function might create one, if it is not present.
   Returns *true* if the switch was successful. It will fail if the name of the default map ("") is given or if another map is already locked.
 
@@ -114,13 +116,139 @@ It takes the following form:
   This can be used to instantly switch to another event if a modifier key is lifted, for example.
 
 
-### Lua-Functions
+### Lua-Exports
 
-**TODO**
+The Lua exports are parameters and functions accessible through the module object.
+
+
+##### Enums:
+
+* *DEFAULT_KEY_MAP*  
+  Name of the default key map (`""`).
+  Should not be changed.
+
+* *status*  
+  Enum table of the key states.
+  The enums are `RESET`, `KEY_DOWN`, `KEY_HOLD` and `KEY_UP`.
+  Should not be changed.
+
+* *keys*  
+  Enum table of the virtual key codes. This tables maps names to virtual key codes of windows.
+  They are too much to list here. The table can be found almost at the top of [init.lua](init.lua).
+  Should not be changed.
+
+* *invKeys*  
+  Inverse enum table of the virtual key codes. Maps the virtual key codes of windows to the names used by this module.
+  Should not be changed.
+
+* *modifier*  
+  Enum table of the virtual key codes of the modifiers. This tables maps names to virtual key codes of windows.
+  The enums are SHIFT, CONTROL and ALT.
+  Should not be changed.
+
+* *invModifier*  
+  Inverse enum table of the virtual key codes of the modifiers.
+  Should not be changed.
+
+
+##### Functions:
+
+* *bool LockKeyMap(string keyMapName)*  
+  Same as the C++-function.
+  A function of the module is to allow the selection of a key-map.
+  If a key map is selected, only input events of the specific key map are handled.
+  No input is passed to Crusaders own handler.
+  Maps are identified by name. A call to this function might create one, if it is not present.
+  Returns *true* if the switch was successful. It will fail if the name of the default map ("") is given or if another map is already locked.
+
+* *bool ReleaseKeyMap(string keyMapName)*  
+  Same as the C++-function.
+  Releases the key map, enabling the default map again. The given string needs to be the current map, or it will fail.
+  Returns *true* if the switch was successful.
+
+* *bool RegisterEvent(string keyMapName, string eventName, string asciiTitle, LuaKeyEventFunction funcToCall)*  
+  Similar to the C++ function, this call registers an event.
+  The first string indicates the key map the event should be placed in. The binding with combinations only happens if both are in the same map.
+  The following value is the actual name of the event used for binding.
+  The ASCII title is currently unused, but it should receive a human readable name of the event with valid ASCII symbols.
+  The final parameter should receive a lua function of a specific structure explained in [Types and Structures](#types-and-structures).
+  *RegisterEvent* returns *true* if successful.
+ 
+* *bool RegisterKeyComb(string keyMapName, bool ctrlActive, bool shiftActive, bool altActive, int virtualKey, string eventName)*  
+  Identical to the C++ function, this call registers a key combination that should trigger a specific event.
+  The first string indicates the key map the combination should be placed in.
+  The following bools are for the status of the modifier keys, the int after that needs to be a virtual key code. For easier use, the key enums can be used. Only keyboard key codes are handled.
+  The last value is the name of the event that should be triggered. It returns *true* on success.
+
+* *bool RegisterKeyCombStr(string keyMapName, string eventName, KeyString keyStr)*  
+  Does the same as *RegisterKeyComb*, but receives the map name and event name first.
+  The last value is specific string describing a key combination explained in [Types and Structures](#types-and-structures).
+
+* *bool RegisterKeyAlias(KeyString ofStr, KeyString isStr)*  
+  Allows to register an alias for a string combination. If the key combination `isStr` is used, handler of Crusader receives `ofStr`.
+  Returns *true* on success.
+  Note, that these alias functions exist on the same level as other events.
+  If an alias key combination is bound to a function, the alias is overwritten.
+  Aliases are only created for the default key map.
+
+
+##### Types and Structures
+
+* *KeyString*  
+  A key string is a short way to write a key combination. The structure uses the enums defined in the enums structures.
+  The longest possible version would be `CONTROL+SHIFT+ALT+"keyEnum"`.
+  The existence of an modifier enum in the string indicates that it should be pressed.
+  The shortest would therefore be `"keyEnum"`. Only one of each modifiers and only one key enum are allowed.
+  The key enum needs to be the last. This structure is also used for the options config.
+
+* *bool LuaKeyEventFunction(LuaKeyEvent event)*  
+  This function in very similar to the C++ version of it, but it only receives the event object.
+  Once again, returning *true* only has an effect if the current key status is key hold, in which case the key handler is called again with a KEY_DOWN status, but still the current key types.
+  This can be used to react to changed modifiers, which do not lift the key event.
+  
+* *LuaKeyEvent*  
+  The event object received by the *LuaKeyEventFunction* has several functions that can be used:
+
+  * *bool ctrlActive()*  
+    If CTRL is pressed.
+
+  * *bool shiftActive()*  
+    If SHIFT is pressed.
+
+  * *bool altActive()*  
+    If ALT is pressed.
+
+  * *int virtualKeyNum()*  
+    Returns the virtual key number of the pressed main key.
+
+  * *KeyStatusEnum statusNum()*  
+    Likely the most important.
+    Returns the number indicating the current key event status.
+
 
 ### Options
 
-**TODO**
+The module provides two main options for the UCP3 config: one to set alias key combinations and one to bind combinations to events.
+The following list will briefly explain the structure.
+
+* **alias** - Used to define alias.
+  * Aliases are defined as key-value pairs under the **alias** option using KeyStrings.
+    The key is the alias that is typed by the user, the value the combination received by the key handler of Crusader. Examples:  
+    "CONTROL+B": "B"  
+    "B": "CONTROL+B"  
+    These would switch the barracks shortcut, so that pressing "B" would not jump to the barracks and only "CONTROL+B" would.
+    Note that these changes simply trick Crusaders handler and some rare combinations might cause issues.
+
+
+* **functions** - Configure key combinations for functions that may be registered.
+  * The **functions** option requires two levels under it. First, the key map is given via name. Example:  
+    "": 
+    * `""` is the name of the default key map. Under this key, the functions key combinations are now defined as key-value pairs.
+      The key is the key combination as KeyString, the value the name of the event function to call. Examples:  
+      "CONTROL+SHIFT+ALT+SPACE": secretMsgCpp  
+      "SHIFT+CONTROL+SPACE": secretMsgLua  
+      Both of these would trigger debug messages on key presses.
+      The Cpp one prints one for every status, the Lua one only on KEY_DOWN.
     
 
 ### Special Thanks

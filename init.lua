@@ -377,6 +377,8 @@ exports.enable = function(self, moduleConfig, globalConfig)
   self.status = status -- status enums, basically; should not be changed (but they could)
   self.keys = keys -- key enums, basically; should not be changed (but they could)
   self.invKeys = invKeys -- reverse, int to key string
+  self.modifier = modifier -- modifier keys
+  self.invModifier = invModifier -- inverse modifier keys
   
   requireTable.lua_RegisterControlFunc(controlFunc) -- register lua event handler
   
