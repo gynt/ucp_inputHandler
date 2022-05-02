@@ -211,6 +211,9 @@ void ResetEventsAndKeyState()
   // zero key state objects of stronghold
   ZeroMemory(crusaderKeyState, sizeof(CrusaderKeyState));
   ZeroMemory(crusaderArrowKeyState, sizeof(CrusaderArrowKeyState));
+
+  // zero native key events -> otherwise, weird conditions get them stuck
+  ZeroMemory(&nativeState, sizeof(CrusaderKeyState));
 }
 
 
