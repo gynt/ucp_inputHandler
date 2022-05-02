@@ -36,8 +36,8 @@ The module has the [winProcHandler](https://github.com/TheRedDaemon/ucp_winProcH
 
 ### C++-Exports
 
-t the time of creation, C functions would need to be parsed through lua in the form of numbers. To make using the module easier, the header [inputHandlerHeader.h](ucp_inputHandler/ucp_inputHandler/inputHandlerHeader.h) can be copied into your project.  
-It is used by calling the function *initModuleFunctions(lua_state * )* during the lua require call of the dll. It tries to receive the provided functions and returns *true* if successful. For this to work, winProcHandler needs to be a dependency.
+At the time of creation, C functions would need to be parsed through lua in the form of numbers. To make using the module easier, the header [inputHandlerHeader.h](ucp_inputHandler/ucp_inputHandler/inputHandlerHeader.h) can be copied into your project.
+It is used by calling the function *initModuleFunctions(lua_state * )* during the lua require call of the dll. It tries to receive the provided functions and returns *true* if successful. For this to work, inputHandler needs to be a dependency of your module.
 The provided functions are the following:
 
 * *bool LockKeyMap(const char\* keyMapName)*  
@@ -55,14 +55,14 @@ The provided functions are the following:
   This function registers a key combination that should trigger a specific event.
   The first string indicates the key map the combination should be placed in.
   The following bools are for the status of the modifier keys, the char after that needs to be a virtual key code. Only keyboard key codes are handled.
-  The last value is the name of the event that should be triggered. It returns *true* on success.
+  The last value is the name of the event that should be triggered. The function returns *true* on success.
 
 * *bool RegisterEvent(const char\* keyMapName, const char\* eventName, const char\* asciiTitle, std::function\<KeyEventFunction>\&& func)*  
   This call registers an event.
   The first string indicates the key map the event should be placed in. The binding with combinations only happens if both are in the same map.
   The following value is the actual name of the event used for binding.
   The ASCII title is currently unused, but it should receive a human readable name of the event with valid ASCII symbols.
-  The final parameter should receive a std\::function that contains an KeyEventFunction (explained later).
+  The final parameter should receive a std\::function that contains a KeyEventFunction (explained later).
   Due to the nature of std\::function, it could receive a raw function pointer, a lambda (with captures) or an std\::function object.
   Note, however, that the received object will be moved. *RegisterEvent* returns *true* if successful.
 
@@ -76,7 +76,7 @@ It takes the following form:
 * *bool KeyEventFunction(KeyEvent, int windowProcPrio, HWND winHandle)*  
   *windowProcPrio* and *winHandle* are not relevant to the event and should be ignored.
   They are needed for the re-translation to a windows event in case the input should pass to Crusaders handler.
-  *KeyEvent* is the relevant part. At the moment it is an bit-field.
+  *KeyEvent* is the relevant part. At the moment it is a bit-field.
   Whether or not this changes depends on the bit order the compiler produces. If issues arise, it will change to a flag integer.
   The current struct contains the following values (in hopefully this order):
 
@@ -133,7 +133,7 @@ The Lua exports are parameters and functions accessible through the module objec
   Should not be changed.
 
 * *keys*  
-  Enum table of the virtual key codes. This tables maps names to virtual key codes of windows.
+  Enum table of the virtual key codes. This table maps names to virtual key codes of windows.
   They are too much to list here. The table can be found almost at the top of [init.lua](init.lua).
   Should not be changed.
 
@@ -178,14 +178,14 @@ The Lua exports are parameters and functions accessible through the module objec
   Identical to the C++ function, this call registers a key combination that should trigger a specific event.
   The first string indicates the key map the combination should be placed in.
   The following bools are for the status of the modifier keys, the int after that needs to be a virtual key code. For easier use, the key enums can be used. Only keyboard key codes are handled.
-  The last value is the name of the event that should be triggered. It returns *true* on success.
+  The last value is the name of the event that should be triggered. This function returns *true* on success.
 
 * *bool RegisterKeyCombStr(string keyMapName, string eventName, KeyString keyStr)*  
   Does the same as *RegisterKeyComb*, but receives the map name and event name first.
-  The last value is specific string describing a key combination explained in [Types and Structures](#types-and-structures).
+  The last value is a specific string describing a key combination explained in [Types and Structures](#types-and-structures).
 
 * *bool RegisterKeyAlias(KeyString ofStr, KeyString isStr)*  
-  Allows to register an alias for a string combination. If the key combination `isStr` is used, handler of Crusader receives `ofStr`.
+  Allows to register an alias for a string combination. If the key combination `isStr` is used, the handler of Crusader receives `ofStr`.
   Returns *true* on success.
   Note, that these alias functions exist on the same level as other events.
   If an alias key combination is bound to a function, the alias is overwritten.
