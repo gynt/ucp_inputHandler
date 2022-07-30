@@ -341,21 +341,21 @@ exports.enable = function(self, moduleConfig, globalConfig)
 
   local asyncKeyStateFuncAddr = core.AOBScan("53 56 57 8b 3d ? ? ? 00 8b f1", 0x400000)
   if asyncKeyStateFuncAddr == nil then
-    print("'inputHandler' was unable to find the address of the key state function and the jump address of 'GetAsyncKeyState'.")
+    log(ERROR, "'inputHandler' was unable to find the address of the key state function and the jump address of 'GetAsyncKeyState'.")
     error("'inputHandler' can not be initialized.")
   end
   local asyncKeyFuncJumpAddr = core.readInteger(asyncKeyStateFuncAddr + 5) -- move to address and then read actual address
   
   local keyStateStructAddr = core.AOBScan("89 2d ? ? ? 00 0f 87 ? ? ? ff", 0x400000)
   if keyStateStructAddr == nil then
-    print("'inputHandler' was unable to find the key state struct of Crusader.")
+    log(ERROR, "'inputHandler' was unable to find the key state struct of Crusader.")
     error("'inputHandler' can not be initialized.")
   end
   keyStateStructAddr = core.readInteger(keyStateStructAddr + 2) -- move pointer to address, then read the value
   
   local arrowKeyStructAddr = core.AOBScan("ff 24 85 ? ? ? 00 89 1d ? ? ? 01 e9 ? ? ? ff", 0x400000)
   if arrowKeyStructAddr == nil then
-    print("'inputHandler' was unable to find the arrow key struct of Crusader.")
+    log(ERROR, "'inputHandler' was unable to find the arrow key struct of Crusader.")
     error("'inputHandler' can not be initialized.")
   end
   arrowKeyStructAddr = core.readInteger(arrowKeyStructAddr + 9) -- move pointer to address, then read the value
